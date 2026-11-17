@@ -1,6 +1,6 @@
 ---
 title: "Workshop 3: Metagenome Assembly"
-author: "Your Name"
+author: "Trisha Waghela"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -15,26 +15,97 @@ knitr::opts_hooks$set(engine = function(options) {
 })
 ```
 
-Notes for [Workshop 3](https://mb5370.bioinformatics.guide/workshop3.html). Run the commands for this workshop in the Terminal, from inside the folder named under each heading. Copy each command you run into a bash chunk.
+```{r read-length-histogram}
+library(tidyverse)
 
-R chunks in this file run from the top of the repository, so give file paths from there, e.g. `flye_metagenome/mock/assembly_info.txt`.
+rl_data <- read_tsv(
+  "read_lengths.txt",
+  col_names = c("id", "length"),
+  show_col_types = FALSE
+)
 
-## Step 1: Examine reads
+ggplot(rl_data, aes(x = length / 1000)) +
+  geom_histogram(binwidth = 2) +
+  xlab("Read Length (kb)") +
+  ylab("Number of Reads") +
+  ggtitle("Read Length Distribution of Mock Metagenome")
+```
 
-Reads are linked into `raw_data/`.
+```{r read-n50}
+total_len <- sum(rl_data$length)
 
-## Step 2: Assembly
+rl_data |>
+  arrange(desc(length)) |>
+  mutate(cumsum = cumsum(length)) |>
+  filter(cumsum > total_len / 2) |>
+  head(n = 1)
+```
 
-Commands run in `flye_metagenome/`.
+```{r gc-histogram}
+library(tidyverse)
 
-## Step 3: Basic assembly QC
+gc <- read_tsv(
+  "assembly_check/assembly.gc.tsv",
+  col_names = c("#seq_name", "length", "GC"),
+  show_col_types = FALSE
+)
 
-Commands run in `assembly_check/`.
+info <- read_tsv(
+  "flye_metagenome/mock/assembly_info.txt",
+  show_col_types = FALSE
+)
 
-## Step 4: Binning
+gc_info <- left_join(info, gc, by = "#seq_name")
 
-Commands run in `metabat/`.
+ggplot(gc_info, aes(x = GC)) +
+  geom_histogram(binwidth = 0.05, colour = "black") +
+  xlab("GC Content") +
+  ylab("Number of Contigs") +
+  ggtitle("GC Content of Metagenome Contigs")
+```
+```{r gc-vs-coverage}
+gc_info |>
+  filter(GC < 0.8, cov. < 25) |>
+  ggplot(aes(x = GC, y = cov.)) +
+ geom_point(aes(size = length.x), alpha = 0.7) +
+  labs(
+    title = "GC Content vs Coverage of Metagenome Contigs",
+    x = "GC Content",
+    y = "Coverage Depth (×)",
+    size = "Contig Length (bp)"
+  ) +
+  theme_minimal()
+```
 
-## Step 5: Bin quality with CheckM
+```{r assembly-completeness}
+assembly_length <- sum(gc_info$length.x)
+reference_length <- 24095709
 
-Commands run in `checkm/`.
+completeness <- (assembly_length / reference_length) * 100
+
+cat("Assembly length:", assembly_length, "bp\n")
+cat("Reference length:", reference_length, "bp\n")
+cat("Proportion of reference:", round(completeness, 2), "%\n")
+```
+```
+### CheckM results and interpretation
+
+CheckM v1.2.2 was used to estimate genome-bin completeness
+and contamination using lineage-specific marker genes.
+
+The analysis evaluated seven genome files, including six
+MetaBAT2 bins and the separately extracted contig_43.
+
+The highest-quality genome had an estimated completeness
+of 99.87% and contamination of 0.71%.
+
+Another bin, metabat.5, had 67.68% completeness and
+0.00% detected contamination.
+
+Several other bins had low completeness (7.48–18.26%),
+indicating that substantial portions of their estimated
+genomes were missing.
+
+Overall, the metagenomic assembly and binning recovered
+genomes of varying quality. Low detected contamination
+does not necessarily indicate a complete genome.
